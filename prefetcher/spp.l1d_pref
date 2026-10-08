@@ -1,7 +1,71 @@
 #include "cache.h"
 
+// Stride Pattern Prefetcher (SPP) for L1D
+//
+// Each load IP gets an entry in ip_table. For constant strides we use the
+// same idea as ip_stride: remember the last stride and a 2-bit confidence.
+// We only treat it as uniform once the counter is at 3, otherwise patterns
+// like 1,2,2,2,3 would look uniform during the 2,2,2 part.
+//
+// For non-uniform strides each IP also keeps a signature built from its
+// last few strides. The pattern table maps a signature to the stride that
+// usually comes next. To prefetch more than one line we just keep looking
+// up the table with the updated signature.
+//
+// Uniform is checked first and if that fails we use the pattern table.
+// The degree (1 to 4) changes based on how accurate our prefetches were in
+// the last epoch. We never prefetch outside the current 4KB page.
 
-void CACHE::l1d_prefetcher_initialize() 
+#define IP_TABLE_SIZE  64
+#define IP_INDEX_BITS  6
+#define IP_TAG_BITS    10
+#define SIG_BITS       12
+#define SIG_SHIFT      3
+#define PT_SIZE        256
+#define MAX_STRIDE     63      // anything bigger can't land in the same page
+#define CONF_MAX       3
+#define PT_CONF_MIN    2       // pattern table confidence needed to prefetch
+#define EPOCH          256     // prefetches sent to L2 per accuracy epoch
+
+struct ip_entry {
+    bool valid;
+    uint16_t tag;
+    uint16_t last_addr;   // low 16 bits of last cache line address
+    int8_t last_stride;
+    uint8_t conf;         // uniform stride confidence
+    uint16_t sig;         // signature of recent strides
+};
+
+struct pt_entry {
+    int8_t stride;        // next expected stride for this signature
+    uint8_t conf;
+};
+
+static ip_entry ip_table[IP_TABLE_SIZE];
+static pt_entry pattern_table[PT_SIZE];
+
+// throttling state
+static int degree = 2;
+static uint64_t sent_snapshot = 0;
+static uint64_t useful_snapshot = 0;
+
+// stats
+static uint64_t uniform_pf = 0, nonuniform_pf = 0;
+
+static uint16_t next_sig(uint16_t sig, int stride)
+{
+    return ((sig << SIG_SHIFT) ^ (stride & 0x7F)) & ((1 << SIG_BITS) - 1);
+}
+
+static uint32_t pt_index(uint16_t sig)
+{
+    return (sig ^ (sig >> 8)) & (PT_SIZE - 1);
+}
+
+static void sat_inc(uint8_t &c) { if (c < CONF_MAX) c++; }
+static void sat_dec(uint8_t &c) { if (c > 0) c--; }
+
+void CACHE::l1d_prefetcher_initialize()
 {
     std::cout << "------------------------------------------------" << std::endl;
     std::cout << "        Stride Pattern Prefetcher (SPP)         " << std::endl;
@@ -10,7 +74,104 @@ void CACHE::l1d_prefetcher_initialize()
 
 void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type, uint8_t critical_ip_flag)
 {
-   
+    if (type != LOAD)
+        return;
+
+    // update the degree every EPOCH prefetches using accuracy = useful / sent to L2.
+    // these counters get reset to 0 after warmup so we resync when that happens
+    if (pf_lower_level < sent_snapshot || pf_useful < useful_snapshot) {
+        sent_snapshot = pf_lower_level;
+        useful_snapshot = pf_useful;
+    }
+
+    uint64_t sent = pf_lower_level - sent_snapshot;
+    if (sent >= EPOCH) {
+        double acc = (double)(pf_useful - useful_snapshot) / sent;
+
+        if (acc >= 0.75)
+            degree = 4;
+        else if (acc >= 0.50)
+            degree = 3;
+        else if (acc >= 0.25)
+            degree = 2;
+        else
+            degree = 1;
+
+        sent_snapshot = pf_lower_level;
+        useful_snapshot = pf_useful;
+    }
+
+    uint64_t cl_addr = addr >> LOG2_BLOCK_SIZE;
+    uint32_t idx = ip & (IP_TABLE_SIZE - 1);
+    uint16_t tag = (ip >> IP_INDEX_BITS) & ((1 << IP_TAG_BITS) - 1);
+    ip_entry &e = ip_table[idx];
+
+    // we only store the low 16 bits of the address, enough for small strides
+    int stride = (int16_t)((uint16_t)cl_addr - e.last_addr);
+
+    if (!e.valid || e.tag != tag || stride > MAX_STRIDE || stride < -MAX_STRIDE) {
+        // new IP, or the jump is too big to be in the same page, so reset
+        e = ip_entry();
+        e.valid = true;
+        e.tag = tag;
+        e.last_addr = cl_addr;
+        return;
+    }
+
+    if (stride == 0)
+        return;
+
+    // same stride as last time -> more confident it's uniform
+    if (stride == e.last_stride)
+        sat_inc(e.conf);
+    else
+        sat_dec(e.conf);
+
+    // the old signature should have predicted this stride. if it keeps
+    // getting it wrong the confidence hits 0 and we replace the stride
+    pt_entry &p = pattern_table[pt_index(e.sig)];
+    if (p.stride == stride)
+        sat_inc(p.conf);
+    else if (p.conf > 0)
+        p.conf--;
+    else
+        p.stride = stride;
+
+    e.sig = next_sig(e.sig, stride);
+    e.last_stride = stride;
+    e.last_addr = cl_addr;
+
+    uint64_t page = addr >> LOG2_PAGE_SIZE;
+    int fill = (MSHR.occupancy < (MSHR.SIZE >> 1)) ? FILL_L1 : FILL_L2;
+
+    if (e.conf == CONF_MAX) {
+        // uniform: prefetch addr + stride, addr + 2*stride, ...
+        for (int i = 1; i <= degree; i++) {
+            uint64_t pf_addr = (cl_addr + i * stride) << LOG2_BLOCK_SIZE;
+            if ((pf_addr >> LOG2_PAGE_SIZE) != page)
+                break;
+            if (prefetch_line(ip, addr, pf_addr, fill, 0))
+                uniform_pf++;
+        }
+    } else {
+        // non-uniform: get the next stride from the table, add it to the
+        // signature and look up again for the one after that
+        uint16_t sig = e.sig;
+        uint64_t pf_cl = cl_addr;
+        for (int i = 0; i < degree; i++) {
+            pt_entry &next = pattern_table[pt_index(sig)];
+            if (next.conf < PT_CONF_MIN)
+                break;
+
+            pf_cl += next.stride;
+            uint64_t pf_addr = pf_cl << LOG2_BLOCK_SIZE;
+            if ((pf_addr >> LOG2_PAGE_SIZE) != page)
+                break;
+            if (prefetch_line(ip, addr, pf_addr, fill, 0))
+                nonuniform_pf++;
+            sig = next_sig(sig, next.stride);
+        }
+    }
 }
 
 void CACHE::l1d_prefetcher_cache_fill(uint64_t v_addr, uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t v_evicted_addr, uint64_t evicted_addr, uint32_t metadata_in)
@@ -20,5 +181,7 @@ void CACHE::l1d_prefetcher_cache_fill(uint64_t v_addr, uint64_t addr, uint32_t s
 
 void CACHE::l1d_prefetcher_final_stats()
 {
-
+    cout << "CPU " << cpu << " L1D SPP final stats" << endl;
+    cout << "Uniform prefetches: " << uniform_pf << "  Non-uniform prefetches: " << nonuniform_pf << endl;
+    cout << "Final degree: " << degree << endl;
 }
