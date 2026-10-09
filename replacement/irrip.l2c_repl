@@ -1,0 +1,82 @@
+#include "cache.h"
+
+// I-RRIP: instruction-conscious RRIP for L2C
+//
+// Basically SRRIP (2-bit RRPV) but code gets priority over data, since an L2
+// miss on an instruction stalls the frontend.
+//  - insertion: code goes in at RRPV 0, data at 2 like normal SRRIP
+//  - promotion: a code hit goes to 0, a data hit only moves down by one
+//  - eviction: we evict a data line at RRPV 3 if there is one, code only
+//    when no data line is at 3
+
+#define maxRRPV 3
+// RRPV a new line starts with
+#define INSTR_INSERT 0
+#define DATA_INSERT  2
+
+uint32_t l2_rrpv[L2C_SET][L2C_WAY];
+uint8_t l2_instr[L2C_SET][L2C_WAY];    // 1 if the line is code, 0 if data
+
+// initialize replacement state
+void CACHE::l2c_initialize_replacement()
+{
+    cout << "Initialize I-RRIP state for L2C" << endl;
+
+    for (int i=0; i<L2C_SET; i++) {
+        for (int j=0; j<L2C_WAY; j++) {
+            l2_rrpv[i][j] = maxRRPV;
+            l2_instr[i][j] = 0;
+        }
+    }
+}
+
+// find replacement victim
+uint32_t CACHE::l2c_find_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type)
+{
+    while (1)
+    {
+        // try to find a data line to evict first
+        for (int i=0; i<L2C_WAY; i++)
+            if (l2_rrpv[set][i] == maxRRPV && !l2_instr[set][i])
+                return i;
+
+        // no data line at max, so evict code
+        for (int i=0; i<L2C_WAY; i++)
+            if (l2_rrpv[set][i] == maxRRPV)
+                return i;
+
+        // nothing at max yet, age everyone and look again
+        for (int i=0; i<L2C_WAY; i++)
+            l2_rrpv[set][i]++;
+    }
+
+    // WE SHOULD NOT REACH HERE
+    assert(0);
+    return 0;
+}
+
+// called on every cache hit and cache fill
+void CACHE::l2c_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t way, uint64_t full_addr, uint64_t ip, uint64_t victim_addr, uint32_t type, uint8_t hit, uint8_t isInstruction)
+{
+    if ((type == WRITEBACK) && ip)
+        assert(0);
+
+    if (hit) {
+        // code jumps straight to 0, data has to earn it one hit at a time
+        if (isInstruction)
+            l2_rrpv[set][way] = 0;
+        else if (l2_rrpv[set][way] > 0)
+            l2_rrpv[set][way]--;
+    }
+    else {
+        // new line coming in, remember if it's code
+        l2_instr[set][way] = isInstruction;
+        l2_rrpv[set][way] = isInstruction ? INSTR_INSERT : DATA_INSERT;
+    }
+}
+
+// use this function to print out your own stats at the end of simulation
+void CACHE::l2c_replacement_final_stats()
+{
+
+}
