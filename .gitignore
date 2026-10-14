@@ -5,3 +5,4 @@ Trace*
 *.pptx
 *.tar.gz
 !Summary.pdf
+.DS_Store
