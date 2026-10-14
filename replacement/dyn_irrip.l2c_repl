@@ -1,0 +1,144 @@
+#include "cache.h"
+
+// Dynamic I-RRIP for L2C, using set dueling
+//
+// Every 32nd set is a leader and always runs plain SRRIP. In the leaders we
+// count instruction accesses/misses against all accesses/misses, and the
+// follower sets switch to I-RRIP only when
+//   (instr accesses + instr misses) / (total accesses + total misses) > threshold
+// So if code is only a small part of the L2 traffic we just behave like SRRIP.
+//
+// The counters get halved every HALF_AT leader accesses so older phases of
+// the program fade out. Threshold can be overridden with DYN_THRESHOLD=<value>.
+
+#define maxRRPV 3
+// RRPV a new line starts with (I-RRIP mode)
+#define INSTR_INSERT 0
+#define DATA_INSERT  2
+
+#define LEADER_GAP 32     // 32 leaders out of 1024 sets
+#define HALF_AT    4096
+#define THRESHOLD  0.15
+
+uint32_t l2_rrpv[L2C_SET][L2C_WAY];
+uint8_t l2_instr[L2C_SET][L2C_WAY];    // 1 if the line is code, 0 if data
+
+// counters, only updated by leader sets
+uint64_t i_acc = 0, i_miss = 0, acc = 0, miss = 0;
+double threshold = THRESHOLD;
+
+// how many follower fills happened in each mode (includes warmup)
+uint64_t ifill = 0, sfill = 0;
+
+static bool leader(uint32_t set)
+{
+    return set % LEADER_GAP == 0;
+}
+
+// leaders are always SRRIP, followers go by the current ratio
+static bool prio_on(uint32_t set)
+{
+    if (leader(set) || acc + miss == 0)
+        return false;
+    double ratio = (double)(i_acc + i_miss) / (acc + miss);
+    return ratio > threshold;
+}
+
+// initialize replacement state
+void CACHE::l2c_initialize_replacement()
+{
+    if (getenv("DYN_THRESHOLD"))
+        threshold = atof(getenv("DYN_THRESHOLD"));
+    cout << "Initialize Dynamic I-RRIP state for L2C, threshold " << threshold << endl;
+
+    for (int i=0; i<L2C_SET; i++) {
+        for (int j=0; j<L2C_WAY; j++) {
+            l2_rrpv[i][j] = maxRRPV;
+            l2_instr[i][j] = 0;
+        }
+    }
+}
+
+// find replacement victim
+uint32_t CACHE::l2c_find_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type)
+{
+    bool prio = prio_on(set);
+
+    while (1)
+    {
+        // in I-RRIP mode try to evict a data line first
+        if (prio)
+            for (int i=0; i<L2C_WAY; i++)
+                if (l2_rrpv[set][i] == maxRRPV && !l2_instr[set][i])
+                    return i;
+
+        for (int i=0; i<L2C_WAY; i++)
+            if (l2_rrpv[set][i] == maxRRPV)
+                return i;
+
+        // nothing at max yet, age everyone and look again
+        for (int i=0; i<L2C_WAY; i++)
+            l2_rrpv[set][i]++;
+    }
+
+    // WE SHOULD NOT REACH HERE
+    assert(0);
+    return 0;
+}
+
+// called on every cache hit and cache fill
+void CACHE::l2c_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t way, uint64_t full_addr, uint64_t ip, uint64_t victim_addr, uint32_t type, uint8_t hit, uint8_t isInstruction)
+{
+    if ((type == WRITEBACK) && ip)
+        assert(0);
+
+    // update the counters from leader sets (writebacks aren't demand accesses so skip them)
+    if (leader(set) && type != WRITEBACK) {
+        acc++;
+        if (isInstruction)
+            i_acc++;
+        if (!hit) {
+            miss++;
+            if (isInstruction)
+                i_miss++;
+        }
+
+        if (acc >= HALF_AT) {
+            i_acc >>= 1;
+            i_miss >>= 1;
+            acc >>= 1;
+            miss >>= 1;
+        }
+    }
+
+    bool prio = prio_on(set);
+
+    if (hit) {
+        // SRRIP sends every hit to 0, in I-RRIP mode data only moves down by one
+        if (!prio || isInstruction)
+            l2_rrpv[set][way] = 0;
+        else if (l2_rrpv[set][way] > 0)
+            l2_rrpv[set][way]--;
+    }
+    else {
+        // new line coming in, remember if it's code
+        l2_instr[set][way] = isInstruction;
+        l2_rrpv[set][way] = (prio && isInstruction) ? INSTR_INSERT : DATA_INSERT;
+
+        if (!leader(set)) {
+            if (prio)
+                ifill++;
+            else
+                sfill++;
+        }
+    }
+}
+
+// use this function to print out your own stats at the end of simulation
+void CACHE::l2c_replacement_final_stats()
+{
+    uint64_t n = ifill + sfill;
+    cout << "Dynamic I-RRIP threshold: " << threshold << endl;
+    cout << "Follower fills in I-RRIP mode: " << ifill << " (" << (n ? 100.0 * ifill / n : 0) << "%)"
+         << "  in SRRIP mode: " << sfill << endl;
+}
