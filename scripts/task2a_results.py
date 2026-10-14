@@ -6,15 +6,14 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-DIR = "results/task2"
+DIR = "results/task2a"
 traces = ["trace1", "trace2", "trace3"]
 configs = ["lru", "rrip", "irrip"]
 names = {"lru": "LRU", "rrip": "SRRIP", "irrip": "I-RRIP"}
-colors = {"lru": "tab:blue", "rrip": "tab:orange", "irrip": "tab:green"}
 
 
-def read_stats(trace, config):
-    text = open(f"{DIR}/{trace}_{config}.txt").read()
+def read(path):
+    text = open(path).read()
     return {
         "ipc": float(re.findall(r"CPU 0 cumulative IPC: ([\d.]+)", text)[-1]),
         "l2_mpki": float(re.search(r"L2C LOAD\s+ACCESS:.*MPKI: ([\d.]+)", text).group(1)),
@@ -27,7 +26,7 @@ stats = {}
 for t in traces:
     stats[t] = {}
     for c in configs:
-        stats[t][c] = read_stats(t, c)
+        stats[t][c] = read(f"{DIR}/{t}_{c}.txt")
     for c in configs:
         stats[t][c]["speedup"] = stats[t][c]["ipc"] / stats[t]["lru"]["ipc"]
 
@@ -39,13 +38,13 @@ for t in traces:
         print("| %s | %s | %.4f | %.4f | %.3f | %.3f | %.3f |" % (t, names[c], s["ipc"], s["speedup"], s["l2_mpki"], s["l2_instr_mpki"], s["l2_data_mpki"]))
 
 
-def plot(metric, ylabel, fname):
+def plot(configs, metric, ylabel, fname):
     width = 0.8 / len(configs)
     fig, ax = plt.subplots(figsize=(7, 4))
     for i, c in enumerate(configs):
         xs = [j + (i - (len(configs) - 1) / 2) * width for j in range(len(traces))]
         ys = [stats[t][c][metric] for t in traces]
-        bars = ax.bar(xs, ys, width, label=names[c], color=colors[c])
+        bars = ax.bar(xs, ys, width, label=names[c])
         ax.bar_label(bars, fmt="%.3f" if metric == "speedup" else "%.2f", fontsize=8)
 
     ax.set_xticks(range(len(traces)))
@@ -67,7 +66,7 @@ def plot(metric, ylabel, fname):
     plt.close(fig)
 
 
-plot("speedup", "Speedup over LRU", "speedup.png")
-plot("l2_mpki", "L2C load MPKI", "l2c_mpki.png")
-plot("l2_instr_mpki", "L2 instruction load MPKI", "l2_instr_mpki.png")
-plot("l2_data_mpki", "L2 data load MPKI", "l2_data_mpki.png")
+plot(configs, "speedup", "Speedup over LRU", "speedup.png")
+plot(configs, "l2_mpki", "L2C load MPKI", "l2c_mpki.png")
+plot(configs, "l2_instr_mpki", "L2 instruction load MPKI", "l2_instr_mpki.png")
+plot(configs, "l2_data_mpki", "L2 data load MPKI", "l2_data_mpki.png")

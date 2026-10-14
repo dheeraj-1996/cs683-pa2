@@ -15,6 +15,11 @@
 // Uniform is checked first and if that fails we use the pattern table.
 // The degree (1 to 4) changes based on how accurate our prefetches were in
 // the last epoch. We never prefetch outside the current 4KB page.
+//
+// Storage, 5397 bits (~675 bytes):
+//   ip table      64 x 48 bits = 3072  (valid 1, tag 10, last addr 16, stride 7, conf 2, sig 12)
+//   pattern table 256 x 9 bits = 2304  (stride 7, conf 2)
+//   throttling    21 bits              (two 9-bit epoch counters, 3-bit degree)
 
 #define IP_TABLE_SIZE  64
 #define IP_INDEX_BITS  6

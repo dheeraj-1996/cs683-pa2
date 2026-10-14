@@ -8,6 +8,8 @@
 //  - promotion: a code hit goes to 0, a data hit only moves down by one
 //  - eviction: we evict a data line at RRPV 3 if there is one, code only
 //    when no data line is at 3
+//
+// 3 bits per line (2-bit RRPV + code bit), 1024 x 8 lines = 3 KB
 
 #define maxRRPV 3
 // RRPV a new line starts with

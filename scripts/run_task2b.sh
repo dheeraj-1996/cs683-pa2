@@ -1,6 +1,6 @@
 #!/bin/bash
 # runs dynamic i-rrip at L2 on all traces for 5 thresholds (no L1D prefetcher, 25M warmup + 25M sim)
-# lru / srrip / i-rrip results for comparison come from run_task2.sh
+# lru / srrip / i-rrip results for comparison come from run_task2a.sh
 # build first:
 #   ./build_champsim.sh no dyn_irrip dyn_irrip
 # usage: ./scripts/run_task2b.sh <trace dir>

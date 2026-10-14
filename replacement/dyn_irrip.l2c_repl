@@ -7,9 +7,17 @@
 // follower sets switch to I-RRIP only when
 //   (instr accesses + instr misses) / (total accesses + total misses) > threshold
 // So if code is only a small part of the L2 traffic we just behave like SRRIP.
+// 32 leaders (~3% of sets) seemed enough to get a decent ratio.
 //
 // The counters get halved every HALF_AT leader accesses so older phases of
 // the program fade out. Threshold can be overridden with DYN_THRESHOLD=<value>.
+//
+// Task 3: SPP prefetches come in as PREFETCH packets
+//  - we don't count them in the leader counters, only demand accesses
+//  - a prefetch hit doesn't promote the line
+//  - prefetched lines go in at maxRRPV so the useless ones leave first
+//    (SPP is only ~50% accurate here). if a demand hit comes it's treated
+//    like a normal data line
 
 #define maxRRPV 3
 // RRPV a new line starts with (I-RRIP mode)
@@ -92,8 +100,8 @@ void CACHE::l2c_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t wa
     if ((type == WRITEBACK) && ip)
         assert(0);
 
-    // update the counters from leader sets (writebacks aren't demand accesses so skip them)
-    if (leader(set) && type != WRITEBACK) {
+    // leader sets update the counters, demand accesses only
+    if (leader(set) && type != WRITEBACK && type != PREFETCH) {
         acc++;
         if (isInstruction)
             i_acc++;
@@ -111,6 +119,10 @@ void CACHE::l2c_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t wa
         }
     }
 
+    // prefetch hit, don't touch it
+    if (hit && type == PREFETCH)
+        return;
+
     bool prio = prio_on(set);
 
     if (hit) {
@@ -123,7 +135,10 @@ void CACHE::l2c_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t wa
     else {
         // new line coming in, remember if it's code
         l2_instr[set][way] = isInstruction;
-        l2_rrpv[set][way] = (prio && isInstruction) ? INSTR_INSERT : DATA_INSERT;
+        if (type == PREFETCH)
+            l2_rrpv[set][way] = maxRRPV;
+        else
+            l2_rrpv[set][way] = (prio && isInstruction) ? INSTR_INSERT : DATA_INSERT;
 
         if (!leader(set)) {
             if (prio)

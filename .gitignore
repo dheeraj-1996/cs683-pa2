@@ -3,3 +3,5 @@ obj/
 Trace*
 *.pdf
 *.pptx
+*.tar.gz
+!Summary.pdf
