@@ -8,14 +8,16 @@ if [ "$#" -lt 3 ]; then
     echo
     echo "Usage: ./build_champsim.sh <L1d Prefetcher> <L2C Replacement Policy> <binary name>"
     echo
-    echo "L1d Prefetchers:"
-    echo "  1) IP Stride"
-    echo "  2) PA2 Prefetcher"
-    echo "  3) No Prefetcher"
+    echo "L1d Prefetchers (prefetcher/*.l1d_pref):"
+    echo "  no         no prefetcher"
+    echo "  ip_stride  IP-stride"
+    echo "  spp        stride pattern prefetcher (task 1)"
     echo
-    echo "L2 Replacement Policies:"
-    echo "  1) LRU"
-    echo "  2) DCLIP"
+    echo "L2 Replacement Policies (replacement/*.l2c_repl):"
+    echo "  lru        LRU"
+    echo "  rrip       SRRIP (task 2a)"
+    echo "  irrip      I-RRIP (task 2a)"
+    echo "  dyn_irrip  dynamic I-RRIP (tasks 2b and 3)"
     echo
     echo "Example:"
     echo "  ./build_champsim.sh ip_stride lru baseline"

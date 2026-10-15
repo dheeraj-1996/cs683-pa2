@@ -35,7 +35,7 @@ else
 	CFlags += -std=gnu99
 endif
 
-.phony: all clean distclean
+.PHONY: all clean distclean buildrepo
 
 
 all: $(binDir)/$(app)
