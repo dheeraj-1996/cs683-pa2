@@ -1,72 +1,33 @@
-# prints the task 2a table and makes the plots from the champsim outputs
-# usage: python3 scripts/task2_results.py
+# prints the task 2a table and makes the figures and LaTeX table from the champsim outputs
+# usage: python3 scripts/task2a_results.py
 
-import re
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+import plotlib as pl
 
 DIR = "results/task2a"
-traces = ["trace1", "trace2", "trace3"]
 configs = ["lru", "rrip", "irrip"]
 names = {"lru": "LRU", "rrip": "SRRIP", "irrip": "I-RRIP"}
 
+stats = {t: {c: pl.read(f"{DIR}/{t}_{c}.txt") for c in configs} for t in pl.TRACES}
+pl.add_relative(stats, "lru")
 
-def read(path):
-    text = open(path).read()
-    return {
-        "ipc": float(re.findall(r"CPU 0 cumulative IPC: ([\d.]+)", text)[-1]),
-        "l2_mpki": float(re.search(r"L2C LOAD\s+ACCESS:.*MPKI: ([\d.]+)", text).group(1)),
-        "l2_instr_mpki": float(re.search(r"L2C INSTRUCTION LOAD MPKI: ([\d.]+)", text).group(1)),
-        "l2_data_mpki": float(re.search(r"L2C DATA LOAD MPKI: ([\d.]+)", text).group(1)),
-    }
-
-
-stats = {}
-for t in traces:
-    stats[t] = {}
-    for c in configs:
-        stats[t][c] = read(f"{DIR}/{t}_{c}.txt")
-    for c in configs:
-        stats[t][c]["speedup"] = stats[t][c]["ipc"] / stats[t]["lru"]["ipc"]
-
-print("| Trace | Policy | IPC | Speedup | L2C Load MPKI | L2 Instr MPKI | L2 Data MPKI |")
-print("|---|---|---|---|---|---|---|")
-for t in traces:
+rows = []
+for t in pl.TRACES:
     for c in configs:
         s = stats[t][c]
-        print("| %s | %s | %.4f | %.4f | %.3f | %.3f | %.3f |" % (t, names[c], s["ipc"], s["speedup"], s["l2_mpki"], s["l2_instr_mpki"], s["l2_data_mpki"]))
+        rows.append([t, names[c], "%.4f" % s["ipc"], "%.4f" % s["speedup"],
+                     "%.3f" % s["l2_mpki"], "%.3f" % s["l2_instr_mpki"], "%.3f" % s["l2_data_mpki"]])
 
+header = ["Trace", "Policy", "IPC", "Speedup", "L2C load MPKI", "L2 instr MPKI", "L2 data MPKI"]
+print("| " + " | ".join(header) + " |")
+print("|---" * len(header) + "|")
+for r in rows:
+    print("| " + " | ".join(r) + " |")
 
-def plot(configs, metric, ylabel, fname):
-    width = 0.8 / len(configs)
-    fig, ax = plt.subplots(figsize=(7, 4))
-    for i, c in enumerate(configs):
-        xs = [j + (i - (len(configs) - 1) / 2) * width for j in range(len(traces))]
-        ys = [stats[t][c][metric] for t in traces]
-        bars = ax.bar(xs, ys, width, label=names[c])
-        ax.bar_label(bars, fmt="%.3f" if metric == "speedup" else "%.2f", fontsize=8)
+pl.ieee_style()
+pl.latex_table(f"{DIR}/table.tex", "L2C replacement policies, no L1D prefetcher (25M instructions)", "tab:task2a",
+               ["Trace", "Policy", "IPC", "Speedup", "L2C MPKI", "Instr. MPKI", "Data MPKI"], rows)
 
-    ax.set_xticks(range(len(traces)))
-    ax.set_xticklabels(traces)
-    ax.set_ylabel(ylabel)
-
-    if metric == "speedup":
-        # speedups are close to 1 so zoom in
-        lo = min(stats[t][c]["speedup"] for t in traces for c in configs)
-        hi = max(stats[t][c]["speedup"] for t in traces for c in configs)
-        ax.set_ylim(lo - 0.01, hi + 0.01)
-        ax.axhline(1.0, color="gray", linestyle="--")
-    else:
-        ax.set_ylim(0, ax.get_ylim()[1] * 1.15)
-
-    ax.legend(loc="upper left", ncol=len(configs))
-    fig.tight_layout()
-    fig.savefig(f"{DIR}/{fname}", dpi=150)
-    plt.close(fig)
-
-
-plot(configs, "speedup", "Speedup over LRU", "speedup.png")
-plot(configs, "l2_mpki", "L2C load MPKI", "l2c_mpki.png")
-plot(configs, "l2_instr_mpki", "L2 instruction load MPKI", "l2_instr_mpki.png")
-plot(configs, "l2_data_mpki", "L2 data load MPKI", "l2_data_mpki.png")
+pl.bars(stats, ["rrip", "irrip"], names, "speedup", "Speedup over LRU", f"{DIR}/speedup", order=configs)
+pl.bars(stats, configs, names, "l2_mpki", "L2C load MPKI", f"{DIR}/l2c_mpki")
+pl.bars(stats, configs, names, "l2_instr_mpki", "L2C instruction MPKI", f"{DIR}/l2_instr_mpki")
+pl.bars(stats, configs, names, "l2_data_mpki", "L2C data MPKI", f"{DIR}/l2_data_mpki")

@@ -1,0 +1,29 @@
+\begin{table*}[t]
+\centering
+\caption{SPP combined with prefetch-aware dynamic I-RRIP (25M instructions)}
+\label{tab:task3}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{llrrrrrrrr}
+\toprule
+Trace & Config & IPC & Speedup & Acc. (\%) & Cov. (\%) & L1D & L2C & L2 instr. & L2 data \\
+\midrule
+trace1 & No PF + LRU & 0.2321 & 1.0000 & -- & -- & 10.679 & 17.702 & 10.371 & 7.331 \\
+ & SPP + LRU & 0.2337 & 1.0069 & 55.65 & 8.01 & 9.824 & 17.024 & 10.411 & 6.613 \\
+ & No PF + Dyn. I-RRIP & 0.2319 & 0.9988 & -- & -- & 10.680 & 17.775 & 9.902 & 7.873 \\
+ & SPP + Dyn. I-RRIP & 0.2336 & 1.0065 & 55.60 & 7.95 & 9.830 & 16.986 & 9.890 & 7.096 \\
+\midrule
+trace2 & No PF + LRU & 0.2499 & 1.0000 & -- & -- & 13.535 & 28.644 & 20.141 & 8.504 \\
+ & SPP + LRU & 0.2512 & 1.0052 & 49.52 & 2.34 & 13.219 & 28.680 & 20.449 & 8.231 \\
+ & No PF + Dyn. I-RRIP & 0.2539 & 1.0161 & -- & -- & 13.538 & 24.979 & 15.777 & 9.202 \\
+ & SPP + Dyn. I-RRIP & 0.2557 & 1.0232 & 49.96 & 2.32 & 13.221 & 24.628 & 15.684 & 8.944 \\
+\midrule
+trace3 & No PF + LRU & 0.3820 & 1.0000 & -- & -- & 3.403 & 3.956 & 1.120 & 2.836 \\
+ & SPP + LRU & 0.3878 & 1.0152 & 46.77 & 11.89 & 2.999 & 3.402 & 1.130 & 2.271 \\
+ & No PF + Dyn. I-RRIP & 0.3820 & 1.0000 & -- & -- & 3.403 & 3.891 & 1.002 & 2.890 \\
+ & SPP + Dyn. I-RRIP & 0.3881 & 1.0159 & 47.03 & 12.00 & 2.995 & 3.304 & 0.995 & 2.309 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table*}
