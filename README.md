@@ -44,6 +44,52 @@ Where:
 
 ChampSim measures IPC (instructions per cycle) as its main performance metric. It also prints other useful metrics at the end of each simulation.
 
+## PA2: reproducing the results
+
+What each task adds:
+
+| Task | Files | What it is |
+|---|---|---|
+| 1 | `prefetcher/spp.l1d_pref` | Stride pattern prefetcher at L1D (uniform + signature-based strides, accuracy throttling) |
+| 2a | `replacement/rrip.l2c_repl`, `replacement/irrip.l2c_repl` | SRRIP and instruction-conscious I-RRIP at L2C |
+| 2b | `replacement/dyn_irrip.l2c_repl` | Dynamic I-RRIP: leader sets sample the instruction share of L2 traffic, followers switch policy on a threshold (`DYN_THRESHOLD`, default 0.15) |
+| 3 | `replacement/dyn_irrip.l2c_repl` | Same policy, prefetch-aware: prefetches are inserted at max RRPV and do not train the leaders |
+
+Build the binaries the run scripts expect:
+
+```bash
+./build_champsim.sh no lru baseline
+./build_champsim.sh ip_stride lru ipstride
+./build_champsim.sh spp lru spp
+./build_champsim.sh no lru lru
+./build_champsim.sh no rrip rrip
+./build_champsim.sh no irrip irrip
+./build_champsim.sh no dyn_irrip dyn_irrip
+./build_champsim.sh spp dyn_irrip spp_dyn
+```
+
+Run the simulations (traces default to `../traces`). Each script runs at most `JOBS` simulations at once (default: number of cores). `WARMUP` and `SIM` override the 25M instruction counts for quick tests:
+
+```bash
+./scripts/run_task1.sh ../traces
+./scripts/run_task2a.sh ../traces
+./scripts/run_task2b.sh ../traces
+./scripts/run_task3.sh ../traces
+```
+
+Make the tables and figures. Each script prints a Markdown table and writes `results/<task>/table.tex` (booktabs) plus every figure as PDF (for LaTeX, fonts embedded) and PNG. Figures are one IEEE column wide (3.5 in) with 8 pt Times text:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r scripts/requirements.txt
+.venv/bin/python scripts/task1_results.py
+.venv/bin/python scripts/task2a_results.py
+.venv/bin/python scripts/task2b_results.py
+.venv/bin/python scripts/task3_results.py
+```
+
+The code builds with current GCC (tested with GCC 15.2), so the GCC 7 setup below is optional.
+
 ## Install GCC 7 on Ubuntu
 
 ```bash
