@@ -32,11 +32,12 @@ uint32_t l2_rrpv[L2C_SET][L2C_WAY];
 uint8_t l2_instr[L2C_SET][L2C_WAY];    // 1 if the line is code, 0 if data
 
 // counters, only updated by leader sets
-uint64_t i_acc = 0, i_miss = 0, acc = 0, miss = 0;
-double threshold = THRESHOLD;
+// static so these short names can't clash with globals in other files
+static uint64_t i_acc = 0, i_miss = 0, acc = 0, miss = 0;
+static double threshold = THRESHOLD;
 
-// how many follower fills happened in each mode (includes warmup)
-uint64_t ifill = 0, sfill = 0;
+// how many follower fills happened in each mode (simulation phase only)
+static uint64_t ifill = 0, sfill = 0;
 
 static bool leader(uint32_t set)
 {
@@ -55,8 +56,13 @@ static bool prio_on(uint32_t set)
 // initialize replacement state
 void CACHE::l2c_initialize_replacement()
 {
-    if (getenv("DYN_THRESHOLD"))
+    if (getenv("DYN_THRESHOLD")) {
         threshold = atof(getenv("DYN_THRESHOLD"));
+        if (threshold < 0 || threshold > 1) {
+            cerr << "DYN_THRESHOLD must be between 0 and 1, got " << getenv("DYN_THRESHOLD") << endl;
+            exit(1);
+        }
+    }
     cout << "Initialize Dynamic I-RRIP state for L2C, threshold " << threshold << endl;
 
     for (int i=0; i<L2C_SET; i++) {
@@ -140,7 +146,7 @@ void CACHE::l2c_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t wa
         else
             l2_rrpv[set][way] = (prio && isInstruction) ? INSTR_INSERT : DATA_INSERT;
 
-        if (!leader(set)) {
+        if (!leader(set) && warmup_complete[cpu]) {
             if (prio)
                 ifill++;
             else
