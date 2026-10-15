@@ -5,12 +5,14 @@
 #   ./build_champsim.sh spp dyn_irrip spp_dyn
 # usage: ./scripts/run_task3.sh <trace dir>
 
+source "$(dirname "$0")/lib.sh"
 TRACES=${1:-../traces}
+check_traces $TRACES
 mkdir -p results/task3
+bin=$(find_bin spp_dyn) || exit 1
 
 for t in $TRACES/*.champsimtrace.*; do
     name=$(basename $t | cut -d. -f1)
-    ./bin/*-1core-spp_dyn -warmup_instructions 25000000 -simulation_instructions 25000000 \
-        -traces $t > results/task3/${name}_spp_dyn.txt 2>&1 &
+    run_sim $bin $t results/task3/${name}_spp_dyn.txt
 done
 wait

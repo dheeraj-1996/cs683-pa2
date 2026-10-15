@@ -5,14 +5,17 @@
 #   ./build_champsim.sh no dyn_irrip dyn_irrip
 # usage: ./scripts/run_task2b.sh <trace dir>
 
+source "$(dirname "$0")/lib.sh"
 TRACES=${1:-../traces}
+check_traces $TRACES
 mkdir -p results/task2b
+bin=$(find_bin dyn_irrip) || exit 1
 
 for thr in 0.05 0.15 0.25 0.35 0.45; do
+    export DYN_THRESHOLD=$thr
     for t in $TRACES/*.champsimtrace.*; do
         name=$(basename $t | cut -d. -f1)
-        DYN_THRESHOLD=$thr ./bin/*-1core-dyn_irrip -warmup_instructions 25000000 -simulation_instructions 25000000 \
-            -traces $t > results/task2b/${name}_dyn_$thr.txt 2>&1 &
+        run_sim $bin $t results/task2b/${name}_dyn_$thr.txt
     done
 done
 wait
