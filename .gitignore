@@ -5,4 +5,10 @@ Trace*
 *.pptx
 *.tar.gz
 !Summary.pdf
+!results/**/*.pdf
+!report/figures/**/*.pdf
 .DS_Store
+inc/*.bak
+inc/sed*
+.venv/
+__pycache__/
