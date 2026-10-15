@@ -1,0 +1,26 @@
+\begin{table}[t]
+\centering
+\caption{L1D prefetchers: performance and prefetch quality (25M instructions)}
+\label{tab:task1}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{llrrrrr}
+\toprule
+Trace & Config & IPC & Speedup & L1D MPKI & Acc. (\%) & Cov. (\%) \\
+\midrule
+trace1 & No prefetcher & 0.2321 & 1.0000 & 10.679 & -- & -- \\
+ & IP-stride & 0.2330 & 1.0039 & 10.119 & 52.75 & 5.24 \\
+ & SPP & 0.2337 & 1.0069 & 9.824 & 55.65 & 8.01 \\
+\midrule
+trace2 & No prefetcher & 0.2499 & 1.0000 & 13.535 & -- & -- \\
+ & IP-stride & 0.2501 & 1.0007 & 13.437 & 38.10 & 0.72 \\
+ & SPP & 0.2512 & 1.0052 & 13.219 & 49.52 & 2.34 \\
+\midrule
+trace3 & No prefetcher & 0.3820 & 1.0000 & 3.403 & -- & -- \\
+ & IP-stride & 0.3828 & 1.0022 & 3.319 & 15.88 & 2.47 \\
+ & SPP & 0.3878 & 1.0152 & 2.999 & 46.77 & 11.89 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}

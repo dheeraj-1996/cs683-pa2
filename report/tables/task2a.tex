@@ -1,0 +1,26 @@
+\begin{table}[t]
+\centering
+\caption{L2C replacement policies, no L1D prefetcher (25M instructions)}
+\label{tab:task2a}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{llrrrrr}
+\toprule
+Trace & Policy & IPC & Speedup & L2C MPKI & Instr. MPKI & Data MPKI \\
+\midrule
+trace1 & LRU & 0.2321 & 1.0000 & 17.702 & 10.371 & 7.331 \\
+ & SRRIP & 0.2320 & 0.9996 & 17.608 & 10.550 & 7.059 \\
+ & I-RRIP & 0.2319 & 0.9988 & 17.773 & 9.876 & 7.897 \\
+\midrule
+trace2 & LRU & 0.2499 & 1.0000 & 28.644 & 20.141 & 8.504 \\
+ & SRRIP & 0.2504 & 1.0020 & 27.272 & 19.325 & 7.947 \\
+ & I-RRIP & 0.2546 & 1.0186 & 24.563 & 15.299 & 9.264 \\
+\midrule
+trace3 & LRU & 0.3820 & 1.0000 & 3.956 & 1.120 & 2.836 \\
+ & SRRIP & 0.3816 & 0.9990 & 4.041 & 1.195 & 2.845 \\
+ & I-RRIP & 0.3820 & 1.0001 & 3.889 & 0.995 & 2.894 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
